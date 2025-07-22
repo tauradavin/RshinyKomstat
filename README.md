@@ -1,7 +1,4 @@
 
-```markdown
----
-
 ### 📋 Alur Penggunaan Aplikasi
 
 Untuk mendapatkan hasil analisis yang maksimal, disarankan untuk mengikuti alur kerja berikut:
@@ -24,5 +21,3 @@ Untuk mendapatkan hasil analisis yang maksimal, disarankan untuk mengikuti alur 
 5.  **Regresi Linear Berganda**:
     * Ini adalah tahap pemodelan utama. Pilih satu variabel dependen (Y) dan beberapa variabel independen (X).
     * Aplikasi akan secara otomatis menampilkan hasil regresi OLS, perbandingan dengan regresi robust, interpretasi lengkap, serta semua hasil uji asumsi klasik yang relevan dengan model Anda.
-
-```
