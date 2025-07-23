@@ -1,4 +1,3 @@
-# server.R - FINAL FIXED VERSION
 server <- function(input, output, session) {
   
   # Observer untuk menginisialisasi pilihan variabel
