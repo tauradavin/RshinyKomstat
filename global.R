@@ -20,21 +20,6 @@ library(rmarkdown)
 library(gridExtra)
 library(htmlwidgets)
 
-# --- COBA INSTALL DAN LOAD OFFICER ---
-tryCatch({
-  if (!require(officer, quietly = TRUE)) {
-    install.packages("officer")
-    library(officer)
-  }
-  if (!require(flextable, quietly = TRUE)) {
-    install.packages("flextable")
-    library(flextable)
-  }
-  cat("Officer dan Flextable berhasil dimuat\n")
-}, error = function(e) {
-  cat("Error loading officer/flextable:", e$message, "\n")
-})
-
 # --- Memuat Data Awal ---
 tryCatch({
   data_uas_initial <- read_excel("Data Uas.xlsx")
