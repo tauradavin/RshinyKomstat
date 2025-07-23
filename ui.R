@@ -1,10 +1,3 @@
-# Complete Enhanced R Shiny Dashboard UI with Mobile Optimization
-library(shinydashboard)
-library(shiny)
-library(DT)
-library(leaflet)
-library(plotly)
-
 dashboardPage(
   skin = "green",
   dashboardHeader(title = "Dashboard Statistik", titleWidth = 300),
