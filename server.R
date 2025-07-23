@@ -362,10 +362,7 @@ server <- function(input, output, session) {
         "- **Histogram**: Distribusi frekuensi variabel numerik",
         "- **Scatter Plot**: Hubungan antara dua variabel numerik",
         "- **Box Plot**: Distribusi dan outliers",
-        "- **Bar Chart**: Frekuensi variabel kategorikal",
-        "- **Line Chart**: Tren data",
         "- **Density Plot**: Estimasi kepadatan probabilitas",
-        "- **Violin Plot**: Kombinasi box plot dan density plot",
         "- **Correlation Heatmap**: Matriks korelasi antar variabel",
         "",
         "## Manfaat Visualisasi:",
@@ -595,10 +592,11 @@ server <- function(input, output, session) {
   })
   
   #====================================================#
-  # TAB: STATISTIK DESKRIPTIF                          #
+  # TAB: STATISTIK DESKRIPTIF (DIPERBARUI)             #
   #====================================================#
   
-  output$tabel_deskriptif <- renderDT({
+  # Gunakan eventReactive agar analisis hanya berjalan saat tombol ditekan
+  deskriptif_data <- eventReactive(input$run_deskriptif, {
     req(input$deskriptif_vars)
     
     data_selected <- rv_data$data[, input$deskriptif_vars, drop = FALSE]
@@ -610,56 +608,51 @@ server <- function(input, output, session) {
           N = length(vec), Mean = mean(vec), Median = median(vec),
           SD = sd(vec), Variance = var(vec), Q1 = quantile(vec, 0.25),
           Q3 = quantile(vec, 0.75), IQR = IQR(vec), Range = max(vec) - min(vec),
-          Skewness = skewness(vec, type = 2), Kurtosis = kurtosis(vec, type = 2)
+          Skewness = e1071::skewness(vec, type = 2), Kurtosis = e1071::kurtosis(vec, type = 2)
         )
       }
     })
     
-    summary_df <- bind_rows(summary_list, .id = "Variabel") %>%
+    bind_rows(summary_list, .id = "Variabel") %>%
       mutate(across(where(is.numeric), ~round(., 3)))
-    
-    datatable(summary_df, rownames = FALSE,
+  })
+  
+  output$tabel_deskriptif <- renderDT({
+    datatable(deskriptif_data(), rownames = FALSE,
               options = list(scrollX = TRUE, pageLength = 10, language = list(search = "Cari:")))
   })
   
   output$interpretasi_deskriptif <- renderUI({
-    req(input$deskriptif_vars)
+    df <- deskriptif_data()
     
-    interpretations <- lapply(input$deskriptif_vars, function(var_name) {
-      vec <- na.omit(rv_data$data[[var_name]])
-      if(!is.numeric(vec)) return(NULL)
+    interpretations <- lapply(1:nrow(df), function(i) {
+      row <- df[i, ]
+      var_name <- row$Variabel
       
-      mean_val <- mean(vec)
-      median_val <- median(vec)
-      sd_val <- sd(vec)
-      iqr_val <- IQR(vec)
-      skew_val <- skewness(vec, type = 2)
-      kurt_val <- kurtosis(vec, type = 2)
-      
-      skew_desc <- if (abs(skew_val) < 0.5) {
+      skew_desc <- if (abs(row$Skewness) < 0.5) {
         "distribusi cenderung <b>simetris</b>."
-      } else if (skew_val > 0.5) {
+      } else if (row$Skewness > 0.5) {
         "distribusi <b>menjulur ke kanan (positive skew)</b>."
       } else {
         "distribusi <b>menjulur ke kiri (negative skew)</b>."
       }
       
-      kurt_desc <- if (kurt_val > 1) {
-        "<b>Leptokurtik</b>. Distribusi memiliki puncak yang lebih runcing."
-      } else if (kurt_val < -1) {
-        "<b>Platykurtik</b>. Distribusi memiliki puncak yang lebih datar."
+      kurt_desc <- if (row$Kurtosis > 1) {
+        "<b>Leptokurtik</b> (puncak runcing)."
+      } else if (row$Kurtosis < -1) {
+        "<b>Platykurtik</b> (puncak datar)."
       } else {
-        "<b>Mesokurtik</b>. Keruncingan distribusi mendekati normal."
+        "<b>Mesokurtik</b> (keruncingan normal)."
       }
       
       paste0(
         "<h4>Interpretasi untuk Variabel: <strong>", var_name, "</strong></h4>",
         "<ul>",
-        "<li><b>Mean:</b> ", round(mean_val, 2), "</li>",
-        "<li><b>Median:</b> ", round(median_val, 2), "</li>",
-        "<li><b>Standard Deviation:</b> ", round(sd_val, 2), "</li>",
-        "<li><b>Skewness:</b> ", round(skew_val, 2), " - ", skew_desc, "</li>",
-        "<li><b>Kurtosis:</b> ", round(kurt_val, 2), " - ", kurt_desc, "</li>",
+        "<li><b>Mean:</b> ", row$Mean, "</li>",
+        "<li><b>Median:</b> ", row$Median, "</li>",
+        "<li><b>Standard Deviation:</b> ", row$SD, "</li>",
+        "<li><b>Skewness:</b> ", row$Skewness, " - ", skew_desc, "</li>",
+        "<li><b>Kurtosis:</b> ", row$Kurtosis, " - ", kurt_desc, "</li>",
         "</ul>"
       )
     })
@@ -673,181 +666,79 @@ server <- function(input, output, session) {
   # UI dinamis untuk input grafik
   output$plot_inputs <- renderUI({
     numeric_vars <- names(rv_data$data)[sapply(rv_data$data, is.numeric)]
-    categorical_vars <- names(rv_data$data)[!sapply(rv_data$data, is.numeric) |
-                                              sapply(rv_data$data, function(x) length(unique(na.omit(x))) <= 10)]
+    categorical_vars <- names(rv_data$data)[!sapply(rv_data$data, is.numeric) | sapply(rv_data$data, function(x) length(unique(na.omit(x))) <= 15)]
     
     switch(input$plot_type,
-           "Histogram" = {
-             tagList(
-               selectInput("hist_var", "Pilih Variabel (X):", choices = numeric_vars),
-               numericInput("hist_bins", "Jumlah Bins:", value = 30, min = 5, max = 100)
-             )
-           },
-           "Scatter Plot" = {
-             tagList(
-               selectInput("scatter_var_x", "Pilih Variabel (X):", choices = numeric_vars),
-               selectInput("scatter_var_y", "Pilih Variabel (Y):", choices = numeric_vars,
-                           selected = if(length(numeric_vars) > 1) numeric_vars[2] else NULL),
-               checkboxInput("add_smooth", "Tambah Garis Regresi", value = FALSE)
-             )
-           },
-           "Box Plot" = {
-             tagList(
-               selectInput("box_var_y", "Pilih Variabel Numerik (Y):", choices = numeric_vars),
-               selectInput("box_var_x", "Pilih Variabel Kategorikal (X) [Opsional]:",
-                           choices = c("Tidak Ada" = "", categorical_vars), selected = "")
-             )
-           },
-           "Bar Chart" = {
-             tagList(
-               selectInput("bar_var", "Pilih Variabel Kategorikal:", choices = categorical_vars)
-             )
-           },
-           "Line Chart" = {
-             tagList(
-               selectInput("line_var_x", "Pilih Variabel X:", choices = numeric_vars),
-               selectInput("line_var_y", "Pilih Variabel Y:", choices = numeric_vars,
-                           selected = if(length(numeric_vars) > 1) numeric_vars[2] else NULL)
-             )
-           },
-           "Density Plot" = {
-             tagList(
-               selectInput("density_var", "Pilih Variabel Numerik:", choices = numeric_vars)
-             )
-           },
-           "Violin Plot" = {
-             tagList(
-               selectInput("violin_var_y", "Pilih Variabel Numerik (Y):", choices = numeric_vars),
-               selectInput("violin_var_x", "Pilih Variabel Kategorikal (X):", choices = categorical_vars)
-             )
-           },
-           "Correlation Heatmap" = {
-             tagList(
-               selectInput("corr_vars", "Pilih Variabel untuk Korelasi:",
-                           choices = numeric_vars, multiple = TRUE,
-                           selected = if(length(numeric_vars) >= 2) numeric_vars[1:min(5, length(numeric_vars))] else numeric_vars)
-             )
-           }
+           "histogram" = tagList(selectInput("hist_var", "Pilih Variabel (X):", choices = numeric_vars), numericInput("hist_bins", "Jumlah Bins:", value = 30, min = 5, max = 100)),
+           "scatter" = tagList(selectInput("scatter_var_x", "Pilih Variabel (X):", choices = numeric_vars), selectInput("scatter_var_y", "Pilih Variabel (Y):", choices = numeric_vars, selected = if(length(numeric_vars) > 1) numeric_vars[2] else NULL), checkboxInput("add_smooth", "Tambah Garis Regresi", value = FALSE)),
+           "boxplot" = tagList(selectInput("box_var_y", "Pilih Variabel Numerik (Y):", choices = numeric_vars), selectInput("box_var_x", "Pilih Variabel Kategorikal (X) [Opsional]:", choices = c("Tidak Ada" = "", categorical_vars), selected = "")),
+           "bar" = tagList(selectInput("bar_var", "Pilih Variabel Kategorikal:", choices = categorical_vars)),
+           "line" = tagList(selectInput("line_var_x", "Pilih Variabel X:", choices = numeric_vars), selectInput("line_var_y", "Pilih Variabel Y:", choices = numeric_vars, selected = if(length(numeric_vars) > 1) numeric_vars[2] else NULL)),
+           "density" = tagList(selectInput("density_var", "Pilih Variabel Numerik:", choices = numeric_vars)),
+           "violin" = tagList(selectInput("violin_var_y", "Pilih Variabel Numerik (Y):", choices = numeric_vars), selectInput("violin_var_x", "Pilih Variabel Kategorikal (X):", choices = categorical_vars)),
+           "heatmap" = tagList(selectInput("corr_vars", "Pilih Variabel untuk Korelasi:", choices = numeric_vars, multiple = TRUE, selected = if(length(numeric_vars) >= 2) numeric_vars[1:min(5, length(numeric_vars))] else numeric_vars))
     )
   })
   
-  # Render plot utama
-  output$visual_plot <- renderPlot({
-    switch(input$plot_type,
-           "Histogram" = {
-             req(input$hist_var)
-             ggplot(rv_data$data, aes_string(x = input$hist_var)) +
-               geom_histogram(bins = input$hist_bins, fill = input$plot_color, color = "white", alpha = 0.8) +
-               labs(title = paste("Histogram dari", input$hist_var),
-                    x = input$hist_var,
-                    y = "Frekuensi") +
-               theme_minimal()
-           },
-           
-           "Scatter Plot" = {
-             req(input$scatter_var_x, input$scatter_var_y)
-             p <- ggplot(rv_data$data, aes_string(x = input$scatter_var_x, y = input$scatter_var_y)) +
-               geom_point(color = input$plot_color, alpha = 0.7, size = 2) +
-               labs(title = paste("Scatter Plot antara", input$scatter_var_x, "dan", input$scatter_var_y),
-                    x = input$scatter_var_x,
-                    y = input$scatter_var_y) +
-               theme_minimal()
-             
-             if (input$add_smooth) {
-               p <- p + geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3)
-             }
-             p
-           },
-           
-           "Box Plot" = {
-             req(input$box_var_y)
-             if(input$box_var_x == "") {
-               ggplot(rv_data$data, aes_string(x = '""', y = input$box_var_y)) +
-                 geom_boxplot(fill = input$plot_color, alpha = 0.7, width = 0.5) +
-                 labs(title = paste("Box Plot dari", input$box_var_y),
-                      x = "",
-                      y = input$box_var_y) +
-                 theme_minimal() +
-                 theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
-             } else {
-               ggplot(rv_data$data, aes_string(x = input$box_var_x, y = input$box_var_y)) +
-                 geom_boxplot(fill = input$plot_color, alpha = 0.7) +
-                 labs(title = paste("Box Plot dari", input$box_var_y, "berdasarkan", input$box_var_x),
-                      x = input$box_var_x,
-                      y = input$box_var_y) +
-                 theme_minimal()
-             }
-           },
-           
-           "Bar Chart" = {
-             req(input$bar_var)
-             ggplot(rv_data$data, aes_string(x = input$bar_var)) +
-               geom_bar(fill = input$plot_color, alpha = 0.8) +
-               labs(title = paste("Bar Chart dari", input$bar_var),
-                    x = input$bar_var,
-                    y = "Frekuensi") +
-               theme_minimal()
-           },
-           
-           "Line Chart" = {
-             req(input$line_var_x, input$line_var_y)
-             ggplot(rv_data$data, aes_string(x = input$line_var_x, y = input$line_var_y)) +
-               geom_line(color = input$plot_color, size = 1) +
-               geom_point(color = input$plot_color, size = 2) +
-               labs(title = paste("Line Chart antara", input$line_var_x, "dan", input$line_var_y),
-                    x = input$line_var_x,
-                    y = input$line_var_y) +
-               theme_minimal()
-           },
-           
-           "Density Plot" = {
-             req(input$density_var)
-             ggplot(rv_data$data, aes_string(x = input$density_var)) +
-               geom_density(fill = input$plot_color, alpha = 0.7) +
-               labs(title = paste("Density Plot dari", input$density_var),
-                    x = input$density_var,
-                    y = "Density") +
-               theme_minimal()
-           },
-           
-           "Violin Plot" = {
-             req(input$violin_var_x, input$violin_var_y)
-             ggplot(rv_data$data, aes_string(x = input$violin_var_x, y = input$violin_var_y)) +
-               geom_violin(fill = input$plot_color, alpha = 0.7) +
-               labs(title = paste("Violin Plot dari", input$violin_var_y, "berdasarkan", input$violin_var_x),
-                    x = input$violin_var_x,
-                    y = input$violin_var_y) +
-               theme_minimal()
-           },
-           
-           "Correlation Heatmap" = {
-             req(input$corr_vars)
-             if(length(input$corr_vars) < 2) {
-               return(ggplot() +
-                        annotate("text", x = 0.5, y = 0.5, label = "Pilih minimal 2 variabel untuk heatmap korelasi",
-                                 size = 6) +
-                        theme_void())
-             }
-             
-             corr_data <- rv_data$data[, input$corr_vars, drop = FALSE] %>%
-               cor(method = "pearson", use = "complete.obs")
-             
-             corr_long <- expand.grid(Var1 = rownames(corr_data), Var2 = colnames(corr_data))
-             corr_long$value <- as.vector(corr_data)
-             
-             ggplot(corr_long, aes(Var1, Var2, fill = value)) +
-               geom_tile() +
-               geom_text(aes(label = round(value, 2)), color = "white", size = 3) +
-               scale_fill_gradient2(low = "blue", high = "red", mid = "white",
-                                    midpoint = 0, limit = c(-1,1), space = "Lab",
-                                    name = "Korelasi") +
-               labs(title = "Heatmap Korelasi",
-                    x = "", y = "") +
-               theme_minimal(base_size = 12) +
-               theme(axis.text.x = element_text(angle = 45, hjust = 1))
-           }
+  # Buat plot menjadi reaktif terhadap tombol
+  plot_object <- eventReactive(input$create_plot, {
+    req(input$plot_type)
+    
+    custom_title <- if (is.null(input$plot_title) || input$plot_title == "") NULL else input$plot_title
+    custom_xlabel <- if (is.null(input$plot_xlabel) || input$plot_xlabel == "") NULL else input$plot_xlabel
+    custom_ylabel <- if (is.null(input$plot_ylabel) || input$plot_ylabel == "") NULL else input$plot_ylabel
+    plot_theme_func <- get(input$plot_theme, envir = as.environment("package:ggplot2"))
+    
+    p <- switch(input$plot_type,
+                "histogram" = {
+                  req(input$hist_var)
+                  ggplot(rv_data$data, aes_string(x = input$hist_var)) + geom_histogram(bins = input$hist_bins, fill = input$plot_color, color = "white", alpha = 0.8) +
+                    labs(title = custom_title %||% paste("Histogram dari", input$hist_var), x = custom_xlabel %||% input$hist_var, y = custom_ylabel %||% "Frekuensi")
+                },
+                "scatter" = {
+                  req(input$scatter_var_x, input$scatter_var_y)
+                  p_scatter <- ggplot(rv_data$data, aes_string(x = input$scatter_var_x, y = input$scatter_var_y)) + geom_point(color = input$plot_color, alpha = 0.7, size = 2) +
+                    labs(title = custom_title %||% paste("Scatter Plot antara", input$scatter_var_x, "dan", input$scatter_var_y), x = custom_xlabel %||% input$scatter_var_x, y = custom_ylabel %||% input$scatter_var_y)
+                  if (input$add_smooth) { p_scatter <- p_scatter + geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3) }
+                  p_scatter
+                },
+                "boxplot" = {
+                  req(input$box_var_y)
+                  if(input$box_var_x == "") {
+                    ggplot(rv_data$data, aes_string(x = '""', y = input$box_var_y)) + geom_boxplot(fill = input$plot_color, alpha = 0.7, width = 0.5) +
+                      labs(title = custom_title %||% paste("Box Plot dari", input$box_var_y), x = custom_xlabel %||% "", y = custom_ylabel %||% input$box_var_y) +
+                      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+                  } else {
+                    ggplot(rv_data$data, aes_string(x = input$box_var_x, y = input$box_var_y)) + geom_boxplot(fill = input$plot_color, alpha = 0.7) +
+                      labs(title = custom_title %||% paste("Box Plot dari", input$box_var_y, "berdasarkan", input$box_var_x), x = custom_xlabel %||% input$box_var_x, y = custom_ylabel %||% input$box_var_y)
+                  }
+                },
+                "density" = {
+                  req(input$density_var)
+                  ggplot(rv_data$data, aes_string(x = input$density_var)) + geom_density(fill = input$plot_color, alpha = 0.7) +
+                    labs(title = custom_title %||% paste("Density Plot dari", input$density_var), x = custom_xlabel %||% input$density_var, y = custom_ylabel %||% "Density")
+                },
+                "heatmap" = {
+                  req(input$corr_vars, length(input$corr_vars) >= 2)
+                  corr_data <- cor(rv_data$data[, input$corr_vars, drop = FALSE], method = "pearson", use = "complete.obs")
+                  corr_long <- reshape2::melt(corr_data)
+                  ggplot(corr_long, aes(Var1, Var2, fill = value)) + geom_tile(color = "white") +
+                    scale_fill_gradient2(low = "#4575b4", high = "#d73027", mid = "white", midpoint = 0, limit = c(-1,1), name="Korelasi") +
+                    geom_text(aes(label = round(value, 2)), color = "black", size = 3) +
+                    theme_minimal(base_size = 12) +
+                    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1), axis.title = element_blank()) +
+                    labs(title = custom_title %||% "Heatmap Korelasi")
+                }
     )
+    if (!is.null(p)) { p + plot_theme_func() } else { NULL }
   })
+  
+  output$visual_plot <- renderPlotly({
+    p <- plot_object()
+    req(p)
+    ggplotly(p)
+  })
+  
   
   # Interpretasi grafik
   output$plot_interpretation <- renderUI({
