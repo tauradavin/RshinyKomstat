@@ -946,13 +946,10 @@ dashboardPage(
                               choices = c("Histogram" = "histogram", 
                                           "Scatter Plot" = "scatter", 
                                           "Box Plot" = "boxplot", 
-                                          "Bar Chart" = "bar",
-                                          "Line Chart" = "line", 
                                           "Density Plot" = "density", 
-                                          "Violin Plot" = "violin", 
-                                          "Correlation Heatmap" = "heatmap")),
-                  
-                  # Dynamic inputs based on plot type
+                                          "Correlation Heatmap" = "heatmap")
+                              # ------------------------------------
+                  ),
                   uiOutput("plot_inputs"),
                   
                   # Appearance settings
