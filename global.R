@@ -1,4 +1,3 @@
-# global.R - SIMPLE VERSION
 # --- Memuat Library yang Dibutuhkan ---
 library(shiny)
 library(shinydashboard)
