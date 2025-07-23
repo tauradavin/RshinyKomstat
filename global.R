@@ -18,6 +18,7 @@ library(knitr)
 library(rmarkdown)
 library(gridExtra)
 library(htmlwidgets)
+library(plotly)
 
 # --- Memuat Data Awal ---
 tryCatch({
